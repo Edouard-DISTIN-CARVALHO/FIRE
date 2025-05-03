@@ -1,0 +1,907 @@
+---
+title: 'FIRE : La pollution sonore sur les chiroptères.'
+author: "Groupe FIRE CHIROPTERE"
+date: "2024-12-16"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## Problématique : Est-ce que de grandes nuisances sonores entraînent des grandes perturbations sur le cycle de vie des chiroptères ? Comment leur activité est impacté pendant et après des nuits bruyantes? 
+
+## Données collecté 
+```{r données}
+setwd("C:/Users/edoua/OneDrive/Documents/Fac/Cours/UM/S3/FIRE/Données FIRE")
+data <- read.csv("~/Fac/Cours/UM/S3/FIRE/Données FIRE/statsfire.csv")
+library(dplyr)
+
+data <- data %>%
+  mutate(SITE = ifelse(SITE == "LA FARE LES OLIVIER", "LA FARE LES OLIVIERS", SITE))
+data$GENRE <- substr(data$ESP, 1, 3)
+
+```
+
+**Variable d'intérêt**
+ESP : identification des espèces de chauve-souris détectées
+GENRE : genre des espèces de chauves-souris détectées
+TOTAL_NB : nombre de détection total d'espèce de chauve-souris par heure
+TOTA_PULSES : nombre de pulses total d'espèce de chaue-souris par heure
+
+**Variable réponse** 
+DISTANCE : distance des enregistreurs de la salle de concert qui représente la nuissance sonore 
+NIGHT_ID : identifiant de la nuit d'enregistrements en fonction de la nuisance sonore. 
+1 : veille de la nuisance 
+2 : jours de la nuisance 
+3 : lendemain de la nuisance 
+TEMPERATURE et VENT : en fonction des dates et par heure
+SITE : Montpellier ou La Fare les Oliviers
+
+
+## ACP 
+
+Objectif : 
+
+```{r ACP BG}
+library(ade4)
+library(ggplot2)
+library(ggrepel)
+
+# Charger et préparer les données
+data_acp <- data[, c("HOUR", "DISTANCE", "TEMPERATURE", "VENT", "NIGHT_ID")]
+data_acp <- data_acp %>%
+  rename(WIND = VENT)
+
+# Réalisation de l'ACP
+acp <- dudi.pca(data_acp, scale = TRUE, center = TRUE, scannf = FALSE, nf = 3)  # Exclure NIGHT_ID comme qualitative
+
+# Extraire les coordonnées des variables et des individus
+var_coords <- as.data.frame(acp$co[, 1:2])  # Coordonnées des variables (axes 1 et 2)
+var_coords$Variable <- rownames(var_coords)  # Ajouter les noms des variables
+ind_coords <- as.data.frame(acp$li[, 1:2])  # Coordonnées des individus (axes 1 et 2)
+ind_coords$NIGHT_ID <- factor(data_acp$NIGHT_ID)  # Ajouter les groupes (NIGHT_ID)
+
+ggplot() +
+  # Points pour les individus
+  geom_point(data = ind_coords, aes(x = Axis1, y = Axis2, color = NIGHT_ID), alpha = 0.7) +
+  # Flèches pour les variables
+  geom_segment(data = var_coords, aes(x = 0, y = 0, xend = Comp1, yend = Comp2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black", size = 1) +
+  # Labels pour les variables
+  geom_text_repel(data = var_coords, aes(x = Comp1, y = Comp2, label = Variable),
+                  color = "black", size = 5) +
+  # Ajustements des axes
+  xlab(paste0("PC1 (", round(acp$eig[1] / sum(acp$eig) * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(acp$eig[2] / sum(acp$eig) * 100, 1), "%)")) +
+  labs(title = "ACP - Effect of climatic conditions", color = "Night") +
+  # Définition manuelle des couleurs pour NIGHT_ID
+  scale_color_manual(
+    values = c("1" = "lightgrey", "2" = "#8D8D8D", "3" = "#6B8E23"),
+    labels = c("1" = "Eve", "2" = "Day", "3" = "Next day")
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+```
+
+
+```{r ACP}
+library(ade4)
+
+data_acp <- data[, c("HOUR","DISTANCE", "TEMPERATURE","VENT", "NIGHT_ID")]
+
+# Effet de la distance 
+acp <- dudi.pca(data_acp, scale = TRUE, center = TRUE, scannf = FALSE, nf = 3)
+s.corcircle(acp$co)
+print(acp$eig / sum(acp$eig) * 100)  
+summary(acp)
+
+# Définir les couleurs spécifiques pour NIGHT_ID
+colors_night_id <- c("black", "darkgrey", "#6B8E23")  # Noir, gris foncé, et vert olive
+
+# Générer l'ACP avec les nouvelles couleurs
+s.class(
+  acp$li,  # Coordonnées des individus
+  fac = factor(data_acp$NIGHT_ID),  # Grouper par NIGHT_ID
+  col = colors_night_id,  # Couleurs définies
+  clabel = 1.5  # Taille des étiquettes
+)
+
+resultats_agreges <- aggregate(data_acp, 
+                               by = list(DISTANCE = data_acp$DISTANCE, NIGHT_ID = data_acp$NIGHT_ID), 
+                               FUN = mean)
+resultats_agreges
+```
+
+La température et l'heure sont corrélés donc pas beosin de les inclures dans les modèles (on ne retiendra que HOUR. 
+Le vent n'explique pas grand chose donc on ne l'inclue pas dans le modèle. 
+
+Axe 2 : explique le plus le 2e axe mais est corrélée négativement au 1er axe. 
+Temperature et vent ne semble pas beaucoup influencer le modèle.
+Il y a une structuration, à préciser dans le modèle. 
+
+
+Inertie projetée et importance des axes : 
+  - Axe 1 (Ax1) : 29.16 % de la variance.
+  - Axe 2 (Ax2) : 27.30 % de la variance.
+  - Axe 3 (Ax3) : 20.35 % de la variance.
+      = 76.81 %* de la variance totale
+
+ **Cercle des corrélations**
+
+- **DISTANCE et NIGHT_ID** :  corrélées avec l'Axe 1.
+- **HOUR et TEMPERATURE** : Variables influentes sur l'Axe 2.
+- **VENT** : A une contribution modérée mais opposée par rapport aux autres variables.
+  
+
+**Analyse des moyennes agrégées**
+- **TEMPERATURE** : Augmente légèrement avec les nuits pour les distances 470.
+- **VENT** : Diminue fortement entre la Nuit 1 (16.7) et la Nuit 3 (6.4), indiquant une baisse progressive.
+- **HOUR** : Est relativement stable mais montre une légère différence selon les distances et les nuits.
+
+
+L'Axe 1 semble principalement structuré par la **DISTANCE** et le **NIGHT_ID**, qui capturent la variabilité liée à l'éloignement de la salle et au moment des enregistrements.
+L'Axe 2 est fortement influencé par des conditions environnementales comme **TEMPERATURE** et **HOUR**, suggérant un effet saisonnier ou temporel.
+
+
+```{r AFC}
+library(FactoMineR)
+library(factoextra)
+
+# Sélectionner les variables qualitatives
+data_afc <- data[, c("ESP","GENRE", "DISTANCE", "NIGHT_ID", "SITE","LUNAR_PHASE")]
+
+data_afc$DISTANCE <- as.character(data_afc$DISTANCE)
+data_afc$NIGHT_ID <- as.character(data_afc$NIGHT_ID)
+data_afc$LUNAR_PHASE <- as.character(data_afc$LUNAR_PHASE)
+
+# Tableau de contingence pour l'AFC
+
+table_afc <- table(data_afc$GENRE, interaction(data_afc$DISTANCE, data_afc$NIGHT_ID))
+afc_res <- CA(table_afc, graph = TRUE)
+fviz_ca_biplot(afc_res, repel = TRUE, 
+               title = "AFC - Relations entre GENRE, DISTANCE et NIGHT_ID ")
+
+table_afc2 <- table(data_afc$ESP, interaction(data_afc$DISTANCE, data_afc$NIGHT_ID))
+afc_res2 <- CA(table_afc2, graph = TRUE)
+fviz_ca_biplot(afc_res2, repel = TRUE, 
+               title = "AFC - Relations entre ESP DISTANCE et NIGHT_ID")
+
+
+fviz_ca_biplot(
+  afc_res2, 
+  repel = TRUE, 
+  title = "AFC - Relations between ESP, DISTANCE and NIGHT_ID",
+  col.row = "#6B8E23",  # Couleurs pour les lignes (ESP ou individus)
+  col.col = "black",  # Couleurs pour les colonnes (DISTANCE et NIGHT_ID)
+  legend.title = "Groups"
+) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+
+
+```
+
+### Interprétation de l'AFC : Relations entre GENRE, DISTANCE et NIGHT_ID
+
+#### **Axes et inertie expliquée**
+- **Axe 1 (Dim1)** : Explique 33 % de l'inertie.
+  - Cet axe semble structurer les GENRES et leurs occurrences selon les **distances** et les **nuits**.
+- **Axe 2 (Dim2)** : Explique 27.9 % de l'inertie.
+  - Cet axe semble refléter des spécificités de certains GENRES dans des situations particulières.
+
+Ensemble, ces deux axes expliquent **60.9 %** de la variance totale, ce qui est une bonne représentation des relations dans les données.
+
+
+#### **Position des points dans le biplot**
+- Les **GENRES (points bleus)** :
+  - **RHI (Rhinolophus)** : Isolé à droite de l'Axe 1 et en haut. Cela indique une occurrence fortement associée à une combinaison spécifique de distance et nuit.
+  - **EPT (Eptesicus)** : Positionné en haut à gauche, il est distinct des autres GENRES, suggérant une préférence pour des combinaisons de distances et nuits uniques.
+  - **PIP (Pipistrellus)** : Associé aux distances **150.3** et **300.3** (Nuit 3), ce qui indique une fréquence élevée dans ces conditions.
+  - **MYO (Myotis)** et **VES (Vespertilio)** : Proches sur l'Axe 2, partagent des caractéristiques communes dans leurs distributions.
+
+- Les **combinaisons DISTANCE et NIGHT_ID (points rouges)** :
+  - Les distances **150.2** et **300.2** (Nuit 2) sont fortement associées à des GENRES spécifiques comme **NYC (Nyctalus)** et **TAD (Tadarida)**.
+  - Les distances **470.2** et **470.3** (Nuit 2 et Nuit 3) sont associées à des GENRES comme **PLE (Plecotus)** et **RHI (Rhinolophus)**.
+
+#### **Relations observées**
+- Les **GENRES éloignés de l'origine** (comme RHI ou EPT) sont spécifiques à certaines combinaisons de distances et nuits, indiquant une niche écologique distincte ou une réponse marquée à la nuisance sonore.
+- Les **GENRES proches de l'origine** (comme MIN ou NYC) sont présents dans une plus grande diversité de situations, avec des occurrences réparties sur plusieurs distances et nuits.
+
+#### **Interprétation globale**
+- L'AFC montre des **associations fortes** entre certains GENRES de chauves-souris et des combinaisons spécifiques de distances et de nuits.
+- Par exemple :
+  - **RHI** est spécifique à **470.3**, montrant peut-être une tolérance particulière à cette distance lors de la Nuit 3.
+  - **PIP** est très fréquent autour de **150.3** et **300.3**, suggérant une activité accrue à ces distances pendant la Nuit 3.
+- Les GENRES comme **MYO** ou **VES** sont distribués plus uniformément mais présentent tout de même des préférences.
+
+
+## Modèle statistiques :
+
+Modèle Linéaire Généralisé Mixtes 
+Variable d'intérêt : TOTAL_NB et ESP
+Variables réponse : DATE, HEURE, DISTANCE, NIGHT_ID,TEMPERATURE, VENT, LUNAR_PHASE 
+
+Facteur fixe : DISTANCE et NIGHT_ID
+Facteur aléatoire : DATE, HEURE, TEMPERATURE, VENT, LUNAR_PHASE
+
+Distribution : Négative binomial 
+
+```{r}
+
+# Charger et préparer les données
+data_acp <- data[, c("HOUR", "DISTANCE", "TEMPERATURE", "VENT", "NIGHT_ID")]
+
+# Réalisation de l'ACP
+acp <- dudi.pca(data_acp, scale = TRUE, center = TRUE, scannf = FALSE, nf = 3)
+
+# Extraire les coordonnées des variables et des individus
+var_coords <- as.data.frame(acp$co[, 1:2])  # Coordonnées des variables (axes 1 et 2)
+var_coords$Variable <- rownames(var_coords)  # Ajouter les noms des variables
+ind_coords <- as.data.frame(acp$li[, 1:2])  # Coordonnées des individus (axes 1 et 2)
+ind_coords$NIGHT_ID <- factor(data_acp$NIGHT_ID)  # Ajouter les groupes (NIGHT_ID)
+
+# Graphique avec ggplot2 et ellipses
+library(ggplot2)
+library(ggforce)  # Pour les ellipses
+
+ggplot() +
+  # Points pour les individus
+  geom_point(data = ind_coords, aes(x = Axis1, y = Axis2, color = NIGHT_ID), alpha = 0.7) +
+  # Flèches pour les variables
+  geom_segment(data = var_coords, aes(x = 0, y = 0, xend = Comp1, yend = Comp2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black", size = 1) +
+  # Labels pour les variables
+  geom_text_repel(data = var_coords, aes(x = Comp1, y = Comp2, label = Variable),
+                  color = "black", size = 5) +
+  # Ellipses autour des groupes
+  geom_mark_ellipse(data = ind_coords, aes(x = Axis1, y = Axis2, group = NIGHT_ID, color = NIGHT_ID), size = 0.8, alpha = 0.2) +
+  # Ajustements des axes
+  xlab(paste0("PC1 (", round(acp$eig[1] / sum(acp$eig) * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(acp$eig[2] / sum(acp$eig) * 100, 1), "%)")) +
+  labs(title = "ACP - Effet des conditions climatiques ", color = "Nuit") +
+  scale_color_discrete(labels = c("Veille", "Jour", "Lendemain")) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+```
+
+
+```{r GLMM TOTAL_NB}
+datu <- data %>% 
+  group_by(DATE, HOUR, NIGHT_ID,SITE,DISTANCE,TEMPERATURE,VENT,LUNAR_PHASE) %>% 
+  summarise(TOTAL_NB = sum(TOTAL_NB, na.rm = TRUE))
+
+datu$DISTANCE <- as.factor(datu$DISTANCE)
+datu$NIGHT_ID <- as.factor(datu$NIGHT_ID)
+datu$DATE <- as.Date(datu$DATE, format='%Y-%m-%d')
+datu$HOUR <- as.numeric(datu$HOUR)
+datu$SITE <- as.character(datu$SITE)
+datu$TOTAL_NB <- as.numeric(datu$TOTAL_NB)
+datu$LUNAR_PHASE <- as.character(datu$LUNAR_PHASE)
+datu$TEMPERATURE <- as.numeric(datu$TEMPERATURE)
+datu$VENT <- as.numeric(datu$VENT)
+
+library(glmmTMB)
+
+model <- glmmTMB(
+  TOTAL_NB ~ DISTANCE + HOUR + LUNAR_PHASE + NIGHT_ID + (1 | SITE) + (1 | DATE),
+  data = datu,
+  family = nbinom2()
+)
+summary(model)
+
+data$DISTANCE <- as.factor(data$DISTANCE)
+data$NIGHT_ID <- as.factor(data$NIGHT_ID)
+data$ESP <- as.factor(data$ESP)
+data$DATE <- as.Date(data$DATE, format='%Y-%m-%d')
+data$HOUR <- as.numeric(data$HOUR)
+data$SITE <- as.character(data$SITE)
+data$TOTAL_NB <- as.numeric(data$TOTAL_NB)
+data$LUNAR_PHASE <- as.character(data$LUNAR_PHASE)
+data$TEMPERATURE <- as.numeric(data$TEMPERATURE)
+data$VENT <- as.numeric(data$VENT)
+
+model_interaction <- glmmTMB( TOTAL_NB ~ DISTANCE * NIGHT_ID + ESP + HOUR + (1 | SITE) + (1 | DATE),
+  data = data,
+  family = nbinom2() 
+)
+
+summary(model_interaction)
+```
+
+
+```{r GLMM TOTAL_NB suite}
+drop1(model,test="Chi")
+
+library(performance)
+multicollinearity(model)
+
+coef_model <- summary(model)$coefficients$cond
+exp(coef_model)
+
+ggplot(data, aes(x = NIGHT_ID, y = TOTAL_NB, fill = NIGHT_ID)) +
+  geom_bar(stat = "identity", position = "dodge")  +
+  labs(title = "Effet de la nuissance sonore chez les Chiroptères",
+       x = "Nuit", y = "Nombre total de détection de chiroptère", fill = "Nuit") + 
+  annotate("text", x = 1, y = 70, label = "a", size = 5) +
+  annotate("text", x = 2, y = 80, label = "a", size = 5) +
+  annotate("text", x = 3, y = 125, label = "b", size = 5) +
+   scale_x_discrete(labels = c("1" = "Veille", "2" = "Jour", "3" = "Lendemain")) +
+  scale_fill_discrete(labels = c("1" = "Veille", "2" = "Jour", "3" = "Lendemain"))
+  theme_minimal()
+
+```
+
+### Interprétation des résultats du modèle :
+
+Ce modèle utilise une distribution **binomiale négative (nbinom2)** pour modéliser la variable dépendante **TOTAL_NB** (nombre total d’individus) en fonction de plusieurs prédicteurs, avec des effets aléatoires sur **SITE** et **DATE**.
+
+---
+
+#### **1. Effets aléatoires :**
+- **SITE** : La variance est extrêmement faible (**3.408e-09**), ce qui indique que **SITE** n’a presque pas d’effet aléatoire sur **TOTAL_NB**.
+- **DATE** : La variance de l’effet aléatoire (**0.1401**) montre que les variations entre les dates sont plus importantes que celles entre les sites.
+
+---
+
+#### **2. Effets fixes :**
+
+##### **(Intercept)** :
+- **1.546** (p < 0.001) : Indique la valeur de log(TOTAL_NB) lorsque toutes les autres variables explicatives sont à leur valeur de référence (ex. DISTANCE = 0, HOUR = 0, LUNAR_PHASE = référence, NIGHT_ID = référence).
+- La valeur intercept représente une contribution significative au modèle.
+
+---
+
+##### **DISTANCE** :
+- **-0.179** (p = 0.047) : 
+  - Une augmentation de la distance est associée à une **diminution de TOTAL_NB**.
+  - Chaque unité supplémentaire de DISTANCE réduit log(TOTAL_NB) de 0.179, soit une réduction de **~16.3 %** du nombre total (exp(-0.179) = 0.836).
+
+---
+
+##### **HOUR** :
+- **0.060** (p < 0.001) :
+  - Pour chaque heure supplémentaire, log(TOTAL_NB) augmente de 0.060, soit une augmentation de **~6.2 %** de TOTAL_NB (exp(0.060) = 1.062).
+  - Cela indique que le nombre total de chauves-souris tend à augmenter avec le temps.
+
+---
+
+##### **LUNAR_PHASE** :
+- **Décroissante** : **-0.532** (p = 0.107, non significatif) :
+  - Une phase lunaire décroissante tend à réduire log(TOTAL_NB) de 0.532, mais cet effet n'est pas significatif.
+- **Nouvelle Lune** : **-1.031** (p < 0.001) :
+  - Lors de la Nouvelle Lune, TOTAL_NB est significativement réduit de **~64.3 %** (exp(-1.031) = 0.356) par rapport à la phase lunaire de référence.
+- **Pleine Lune** : **0.047** (p = 0.877, non significatif) :
+  - L’effet de la Pleine Lune sur TOTAL_NB est négligeable et statistiquement non significatif.
+
+---
+
+##### **NIGHT_ID** :
+- **NIGHT_ID2** : **0.355** (p = 0.144, non significatif) :
+  - La Nuit 2 ne présente pas d’effet significatif sur TOTAL_NB par rapport à la référence (Nuit 1).
+- **NIGHT_ID3** : **0.439** (p = 0.050, significatif) :
+  - La Nuit 3 est associée à une **augmentation significative de TOTAL_NB de ~55.2 %** (exp(0.439) = 1.552) par rapport à la Nuit 1.
+
+---
+
+#### **3. Qualité du modèle :**
+- **AIC (1843.4)** et **BIC (1884.1)** :
+  - Ces valeurs permettent de comparer ce modèle avec d’autres modèles. Des valeurs plus basses indiquent un meilleur ajustement.
+- **Log-Likelihood (-910.7)** :
+  - Reflète la probabilité que ce modèle ait généré les données observées. Plus il est proche de zéro, mieux c'est.
+- **Dispersion** : La dispersion estimée est **1.02**, ce qui indique une bonne adéquation de la distribution binomiale négative aux données (absence de surdispersion notable).
+
+---
+
+### **Résumé des résultats significatifs :**
+1. **Variables significatives** :
+   - **DISTANCE** (p = 0.047) : Une augmentation de la distance réduit significativement TOTAL_NB.
+   - **HOUR** (p < 0.001) : Une augmentation de l'heure accroît significativement TOTAL_NB.
+   - **LUNAR_PHASE (Nouvelle Lune)** (p < 0.001) : La Nouvelle Lune diminue significativement TOTAL_NB.
+   - **NIGHT_ID (Nuit 3)** (p = 0.050) : La Nuit 3 augmente significativement TOTAL_NB.
+
+2. **Variables non significatives** :
+   - **LUNAR_PHASE (Décroissante et Pleine Lune)**.
+   - **NIGHT_ID (Nuit 2)**.
+
+---
+
+### **Interprétation écologique :**
+- **Distance** : Les chauves-souris semblent moins nombreuses à mesure que la distance à la source d'enregistrement augmente, ce qui pourrait refléter une réponse à une nuisance sonore ou lumineuse.
+- **Temps (HOUR)** : Une activité croissante des chauves-souris est observée au fil des heures, ce qui est cohérent avec leurs comportements nocturnes.
+- **Phase lunaire** : La Nouvelle Lune réduit considérablement l’activité, probablement en raison d’une diminution de la visibilité des proies ou d’une augmentation du risque de prédation.
+- **Nuits (NIGHT_ID)** : La Nuit 3 montre une activité accrue, peut-être liée à une récupération après une perturbation environnementale.
+
+## Inclusion du GENRE dans le modèle
+
+```{r Genre}
+data$DISTANCE <- as.factor(data$DISTANCE)
+data$NIGHT_ID <- as.factor(data$NIGHT_ID)
+data$ESP <- as.factor(data$ESP)
+data$DATE <- as.Date(data$DATE, format='%Y-%m-%d')
+data$HOUR <- as.numeric(data$HOUR)
+data$SITE <- as.character(data$SITE)
+data$TOTAL_NB <- as.numeric(data$TOTAL_NB)
+data$LUNAR_PHASE <- as.character(data$LUNAR_PHASE)
+data$TEMPERATURE <- as.numeric(data$TEMPERATURE)
+data$VENT <- as.numeric(data$VENT)
+
+model_esp <- glmmTMB( TOTAL_NB ~ DISTANCE * NIGHT_ID + ESP + HOUR + (1 | SITE) + (1 | DATE),
+  data = data,
+  family = nbinom2()
+)
+
+summary(model_esp)
+drop1(model_esp,test="Chi")
+
+multicollinearity(model_esp)
+
+# Définir les couleurs pour chaque genre en fonction du gradient
+genre_colors <- c(
+  "PIP" = "#6B8E23",  # Vert olive
+  "HYP" = "#8A9D70",  # Vert-gris clair
+  "MIN" = "#A4AE93",  # Gris-vert clair
+  "MYO" = "#C1C3B1",  # Gris clair avec une teinte de vert
+  "NYC" = "#D3D3C4",  # Gris clair
+  "EPT" = "#BABABA",  # Gris intermédiaire
+  "PLE" = "#A3A3A3",  # Gris un peu plus foncé
+  "RHI" = "#8D8D8D",  # Gris foncé
+  "TAD" = "black",    # Noir
+  "VES" = "darkgrey"  # Gris foncé
+)
+
+# Créer le graphique avec les couleurs spécifiques
+ggplot(data, aes(x = ESP, y = TOTAL_NB, fill = factor(GENRE))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Effect of Noise Disturbance on Bats",
+x = NULL,  # Remove the X-axis title
+y = "Total Number of Bat Detections",
+fill = "Bat Species Genus"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),  # Supprimer les étiquettes de l'axe X
+    axis.ticks.x = element_blank(), # Supprimer les graduations de l'axe X
+    axis.line.x = element_blank()   # Supprimer la ligne de l'axe X
+  ) +
+  scale_fill_manual(
+    values = genre_colors  # Appliquer les couleurs définies pour chaque genre
+  )
+
+
+ggplot(data, aes(x = DISTANCE, y = TOTAL_NB, fill = NIGHT_ID)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Effet de la nuisance sonore chez les chiroptères en fonction de la distance",
+       x = "Distance (Mètre)", y = "Nombre total de détection de chiroptère", fill = "Nuit") + 
+  scale_fill_discrete(labels = c("1" = "Veille", "2" = "Jour", "3" = "Lendemain")) + theme_minimal()
+
+ggplot(data, aes(x = DISTANCE, y = TOTAL_NB)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Effet de la nuisance sonore chez les chiroptères en fonction de la distance",
+       x = "Distance (Mètre)", y = "Nombre total de détection de chiroptère", fill = "Nuit") + 
+  scale_fill_discrete(labels = c("1" = "Veille", "2" = "Jour", "3" = "Lendemain")
+                      ) 
+  + theme_minimal() 
+
+```
+
+### **Analyse détaillée du modèle `summary(model_esp)`**
+
+---
+
+### **1. Aperçu général du modèle**
+- **Type de modèle** : Distribution binomiale négative (**nbinom2**) avec lien logarithmique.
+- **Variables fixes** :
+  - **DISTANCE**, **NIGHT_ID**, **ESP**, **HOUR** (effets principaux).
+  - Interactions entre **DISTANCE** et **NIGHT_ID**.
+- **Effets aléatoires** :
+  - **SITE** : Variabilité entre les sites.
+  - **DATE** : Variabilité entre les dates.
+- **Dispersion** : Le paramètre de dispersion est **1.38**, confirmant une surdispersion modérée dans les données.
+- **Statistiques globales** : 
+  - AIC = **3192.3**.
+  - Log-vraisemblance = **-1565.1**.
+
+---
+
+### **2. Effets aléatoires**
+- **SITE** : La variance est quasi nulle (2.72e-09), indiquant une très faible variabilité entre les sites.
+- **DATE** : Variance modérée (**0.0874**), montrant une variabilité significative entre les dates.
+
+---
+
+### **3. Effets fixes**
+
+#### **Intercept**
+- **Estimate = -0.2522**, **exp(Estimate) = 0.777** :
+  - Représente le log-mean de la variable réponse (**TOTAL_NB**) pour les modalités de référence :
+    - **DISTANCE150**, **NIGHT_ID1**, et l'espèce de référence.
+
+---
+
+#### **Effets principaux**
+
+1. **DISTANCE**  
+   - **DISTANCE300 :**  
+     - `Estimate = -0.053794`, `exp(Estimate) = 0.948`.  
+     - Pas d'effet significatif (*p = 0.75*). Les détections sont réduites de **5,2 %** par rapport à **DISTANCE150**.
+   - **DISTANCE470 :**  
+     - `Estimate = -0.502397`, `exp(Estimate) = 0.605`.  
+     - Effet significatif (*p = 0.018*). Les détections sont réduites de **39,5 %** à **DISTANCE470**.
+
+---
+
+2. **NIGHT_ID**  
+   - **NIGHT_ID2 :**  
+     - `Estimate = -0.419371`, `exp(Estimate) = 0.658`.  
+     - Tendance à une réduction des détections de **34,2 %** par rapport à **NIGHT_ID1**, marginalement significatif (*p = 0.064*).  
+   - **NIGHT_ID3 :**  
+     - `Estimate = 0.176495`, `exp(Estimate) = 1.193`.  
+     - Augmentation de **19,3 %**, mais non significatif (*p = 0.37*).
+
+---
+
+3. **ESP (Effet des espèces)**  
+Certaines espèces présentent des augmentations significatives :
+- **ESPPIPKUH :**
+  - `Estimate = 1.595347`, `exp(Estimate) = 4.931`.  
+  - Les détections augmentent de **393 %** (*p = 0.009*).
+- **ESPPIPPIP :**
+  - `Estimate = 1.815816`, `exp(Estimate) = 6.139`.  
+  - Les détections augmentent de **513 %** (*p = 0.003*).
+- **ESPPIPPYG :**
+  - `Estimate = 1.336026`, `exp(Estimate) = 3.804`.  
+  - Les détections augmentent de **280 %** (*p = 0.029*).
+
+Les autres espèces n'ont pas d'effet significatif.
+
+---
+
+4. **HOUR**  
+- **Estimate = 0.021050**, **exp(Estimate) = 1.021** :
+  - Pour chaque heure supplémentaire, les détections augmentent de **2,1 %** (*p = 0.002*).
+
+---
+
+#### **Interactions DISTANCE × NIGHT_ID**
+1. **DISTANCE300:NIGHT_ID2**  
+   - `Estimate = -0.008738`, `exp(Estimate) = 0.991`.  
+   - Pas d'effet significatif (*p = 0.976*).
+
+2. **DISTANCE470:NIGHT_ID2**  
+   - `Estimate = 1.373778`, `exp(Estimate) = 3.951`.  
+   - Effet significatif (*p = 5.41e-06*). À **DISTANCE470**, pendant **NIGHT_ID2**, les détections augmentent de **295 %**.
+
+3. **DISTANCE300:NIGHT_ID3**  
+   - `Estimate = -0.423606`, `exp(Estimate) = 0.655`.  
+   - Réduction significative de **34,5 %** à **DISTANCE300** pendant **NIGHT_ID3** (*p = 0.067*).
+
+4. **DISTANCE470:NIGHT_ID3**  
+   - `Estimate = 0.806257`, `exp(Estimate) = 2.239`.  
+   - Augmentation significative de **124 %** à **DISTANCE470** pendant **NIGHT_ID3** (*p = 0.003*).
+
+---
+
+### **4. Conclusion et interprétation globale**
+
+#### **Effets significatifs :**
+1. **Distance (DISTANCE470)** :  
+   - Réduction des détections à grande distance (**470 m**), sauf en interaction avec certaines périodes nocturnes (**NIGHT_ID2**, **NIGHT_ID3**).
+   
+2. **Espèces (ESP)** :  
+   - Les genres comme **Pipistrellus pipistrellus**, **P. kuhlii**, et **P. pygmaeus** montrent des détections beaucoup plus élevées, ce qui reflète leur dominance.
+
+3. **Heure (HOUR)** :  
+   - Augmentation modérée mais significative des détections au fil de la nuit.
+
+4. **Interactions :**
+   - **DISTANCE470:NIGHT_ID2** et **DISTANCE470:NIGHT_ID3** montrent des augmentations significatives des détections à grande distance pendant ces périodes.
+
+#### **Effets non significatifs :**
+- **DISTANCE300**, **NIGHT_ID3**, et la plupart des espèces, n'ont pas d'effets significatifs sur les détections.
+
+
+## Modèle sur les valeur de PIP 
+
+```{r GLMM PIP}
+
+data_pip <- data[data$GENRE == "PIP", ]
+model_pip <- glmmTMB(TOTAL_NB ~ DISTANCE * NIGHT_ID + LUNAR_PHASE + HOUR + (1 | SITE) + (1 | DATE), 
+data = data_pip, family = nbinom2())
+
+summary(model_pip)
+drop1(model_pip,test="Chi")
+
+multicollinearity(model_pip)
+
+coef_model_pip <- summary(model_pip)$coefficients$cond
+exp(coef_model_pip)
+
+ggplot(data_pip, aes(x = factor(DISTANCE), y = TOTAL_NB, fill = factor(NIGHT_ID))) +
+  geom_bar(stat = "identity", position = "dodge")  +
+  labs(title = "Effet de la nuissance sonore chez les pipistrèles",
+       x = "Distance", y = "Nombre total de détection de chiroptère", fill = "Nuit") +
+  theme_minimal()
+
+ggplot(data_pip, aes(x = HOUR, y = TOTAL_NB, fill = NIGHT_ID)) + geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Activité des pipistrèles au cours des nuits",
+       x = "Temps (heure)", y = "Nombre total de détection de chiroptère", fill = "Nuit") + theme_light()
+
+```
+
+### **Interprétation des résultats du modèle pour le genre PIP**
+
+#### **1. Aperçu général**
+- Le modèle utilise une distribution **binomiale négative (nbinom2)**, adaptée pour des données de comptage présentant une surdispersion.
+- **Variables fixes :**
+  - **DISTANCE**, **NIGHT_ID**, **LUNAR_PHASE**, et **HOUR** (effets principaux).
+  - Interaction entre **DISTANCE** et **NIGHT_ID**.
+- **Effets aléatoires :**
+  - **SITE** : Variabilité entre les sites.
+  - **DATE** : Variabilité entre les jours.
+- Dispersion (paramètre de la loi binomiale négative) : **1.04**, confirmant une faible surdispersion.
+
+#### **2. Effets aléatoires**
+- Variance pour **SITE** : **0.08256** (écart type : **0.2873**) → Variabilité modérée due aux sites.
+- Variance pour **DATE** : **0.08601** (écart type : **0.2933**) → Variabilité similaire entre les jours.
+
+---
+
+#### **3. Effets fixes**
+
+##### **Intercept**
+- **Estimate = 0.7856, p = 0.0682** : 
+  - Le nombre moyen d'individus pour **DISTANCE150** et **NIGHT_ID1** (modalités de référence) est **exp(0.7856) ≈ 2.19** individus.
+  - L'effet n'est pas significatif (**p > 0.05**).
+
+---
+
+##### **Effets principaux**
+
+1. **DISTANCE**
+   - **DISTANCE300: Estimate = 0.0469, p = 0.8346** :
+     - Pas d'effet significatif par rapport à la référence (**DISTANCE150**).
+   - **DISTANCE470: Estimate = -0.5746, p = 0.0457** :
+     - Effet significatif (**p < 0.05**), réduction de **exp(-0.5746) ≈ 43.7 %** du nombre moyen d'individus pour **DISTANCE470** par rapport à **DISTANCE150**.
+
+2. **NIGHT_ID**
+   - **NIGHT_ID2: Estimate = -0.3013, p = 0.3345** :
+     - Pas d'effet significatif par rapport à **NIGHT_ID1**.
+   - **NIGHT_ID3: Estimate = 0.3486, p = 0.1543** :
+     - Pas d'effet significatif par rapport à **NIGHT_ID1**.
+
+3. **LUNAR_PHASE**
+   - **LUNAR_PHASEDécroissante: Estimate = 0.1884, p = 0.7333** :
+     - Pas d'effet significatif.
+   - **LUNAR_PHASENouvelle Lune: Estimate = -0.6880, p = 0.0135** :
+     - Effet significatif (**p < 0.05**), réduction de **exp(-0.6880) ≈ 49.8 %** du nombre moyen d'individus pendant la nouvelle lune par rapport à la phase de référence.
+   - **LUNAR_PHASEPleine Lune: Estimate = 0.0489, p = 0.9059** :
+     - Pas d'effet significatif.
+
+4. **HOUR**
+   - **Estimate = 0.0469, p = 7.62e-06** :
+     - Effet significatif (**p < 0.001**), augmentation de **exp(0.0469) ≈ 4.8 %** du nombre moyen d'individus pour chaque heure supplémentaire.
+
+---
+
+##### **Interactions (DISTANCE:NIGHT_ID)**
+
+1. **DISTANCE300:NIGHT_ID2**
+   - **Estimate = -0.0935, p = 0.8076** :
+     - Pas d'effet significatif.
+
+2. **DISTANCE470:NIGHT_ID2**
+   - **Estimate = 1.8208, p = 6.87e-06** :
+     - Effet significatif (**p < 0.001**), augmentation de **exp(1.8208) ≈ 515 %** du nombre moyen d'individus pour **DISTANCE470** lors de **NIGHT_ID2** par rapport à la référence.
+
+3. **DISTANCE300:NIGHT_ID3**
+   - **Estimate = -1.0055, p = 0.0018** :
+     - Effet significatif (**p < 0.01**), réduction de **exp(-1.0055) ≈ 63.5 %** du nombre moyen d'individus pour **DISTANCE300** lors de **NIGHT_ID3**.
+
+4. **DISTANCE470:NIGHT_ID3**
+   - **Estimate = 1.0059, p = 0.0092** :
+     - Effet significatif (**p < 0.01**), augmentation de **exp(1.0059) ≈ 173 %** du nombre moyen d'individus pour **DISTANCE470** lors de **NIGHT_ID3**.
+
+---
+
+#### **4. Conclusion**
+
+1. **Effets significatifs :**
+   - **DISTANCE470** : Réduction de **43.7 %** du nombre moyen d'individus par rapport à **DISTANCE150**.
+   - **LUNAR_PHASENouvelle Lune** : Réduction de **49.8 %** du nombre moyen d'individus par rapport à la phase de référence.
+   - **HOUR** : Augmentation de **4.8 %** par heure.
+   - Interactions :
+     - Augmentation marquée du nombre d'individus à **DISTANCE470** lors de **NIGHT_ID2** (**515 %**) et **NIGHT_ID3** (**173 %**).
+     - Réduction du nombre d'individus à **DISTANCE300** lors de **NIGHT_ID3** (**63.5 %**).
+
+2. **Non-significatifs :**
+   - La plupart des phases lunaires (sauf la nouvelle lune).
+   - **NIGHT_ID** (effet principal).
+   - Interaction **DISTANCE300:NIGHT_ID2**.
+
+3. **Interprétation globale :**
+   - **DISTANCE470** influence fortement les détections, particulièrement lors des nuits spécifiques (**NIGHT_ID2** et **NIGHT_ID3**).
+   - L'activité des chauves-souris est significativement réduite pendant la **nouvelle lune**.
+   - Une augmentation progressive de l'activité est observée avec l'heure.
+   
+```{r Modele pour les autres esp}
+data_no_pip <- data[data$GENRE != "PIP", ]
+
+model_no_pip <- glmmTMB(TOTAL_NB ~ DISTANCE + NIGHT_ID + GENRE + (1 | SITE) + (1 | DATE), data = data_no_pip, family = nbinom2())
+
+summary(model_no_pip)
+drop1(model_no_pip,test="Chi")
+
+multicollinearity(model_no_pip)
+
+coef_model_no_pip <- summary(model_no_pip)$coefficients$cond
+exp(coef_model_no_pip)
+
+ggplot(data_no_pip, aes(x = NIGHT_ID, y = TOTAL_NB, fill = NIGHT_ID)) +
+  geom_bar(stat = "identity", position = "dodge")  +labs(title = "Effet de la nuissance sonore chez les autres espèces de Chiroptères",
+       x = "Nuit", y = "Nombre total de détection de chiroptère", fill = "Nuit") + 
+  annotate("text", x = 1, y = 3, label = "a", size = 5) +
+  annotate("text", x = 2, y = 4, label = "a", size = 5) +
+  annotate("text", x = 3, y = 18, label = "b", size = 5) +
+   scale_x_discrete(labels = c("1" = "Veille", "2" = "Jour", "3" = "Lendemain")) + 
+  scale_fill_discrete(labels = c("1" = "Veille", "2" = "Jour", "3" = "Lendemain")) +
+  theme_minimal()
+
+```
+
+### **Interprétation des résultats pour le modèle sans le genre PIP**
+
+---
+
+#### **1. Aperçu général**
+- Le modèle utilise une distribution **binomiale négative (nbinom2)**, adaptée pour des données de comptage présentant une surdispersion.
+- **Variables fixes :**
+  - **DISTANCE**, **NIGHT_ID**, et **GENRE** (effets principaux).
+- **Effets aléatoires :**
+  - **SITE** : Variabilité entre les sites.
+  - **DATE** : Variabilité entre les jours.
+- Dispersion (paramètre de la loi binomiale négative) : **1260**, indiquant une forte surdispersion dans les données.
+
+---
+
+#### **2. Effets aléatoires**
+- Variance pour **SITE** : **0.01278** (écart type : **0.1131**) → Variabilité très faible due aux sites.
+- Variance pour **DATE** : **0.01879** (écart type : **0.1371**) → Variabilité faible due aux jours.
+
+---
+
+#### **3. Effets fixes**
+
+##### **Intercept**
+- **Estimate = -0.2361, p = 0.4541** :
+  - Le nombre moyen d'individus (en log) pour les modalités de référence (**DISTANCE150**, **NIGHT_ID1**, **GENREEPT**) n'est pas significativement différent de 0.
+
+---
+
+##### **Effets principaux**
+
+1. **DISTANCE**
+   - **DISTANCE300: Estimate = 0.1551, p = 0.2087** :
+     - Pas d'effet significatif par rapport à la référence (**DISTANCE150**).
+   - **DISTANCE470: Estimate = 0.0521, p = 0.6907** :
+     - Pas d'effet significatif par rapport à **DISTANCE150**.
+
+2. **NIGHT_ID**
+   - **NIGHT_ID2: Estimate = 0.1210, p = 0.4572** :
+     - Pas d'effet significatif par rapport à la référence (**NIGHT_ID1**).
+   - **NIGHT_ID3: Estimate = 0.4213, p = 0.0030** :
+     - Effet significatif (**p < 0.01**), augmentation de **exp(0.4213) ≈ 52.4 %** du nombre moyen d'individus pour **NIGHT_ID3** par rapport à **NIGHT_ID1**.
+
+3. **GENRE**
+   - La plupart des coefficients associés aux genres ne sont pas significatifs (**p > 0.05**), sauf :
+     - **GENRETAD: Estimate = 0.4904, p = 0.0898** :
+       - Effet marginalement significatif (**p < 0.1**), augmentation de **exp(0.4904) ≈ 63.2 %** du nombre moyen d'individus pour **GENRETAD** par rapport à **GENREEPT**.
+
+---
+
+#### **4. Conclusion et interprétation globale**
+
+1. **Effets significatifs :**
+   - **NIGHT_ID3** : Augmentation de **52.4 %** du nombre moyen d'individus par rapport à **NIGHT_ID1**.
+   - **GENRETAD** (effet marginal) : Augmentation de **63.2 %** du nombre moyen d'individus par rapport à **GENREEPT**.
+
+2. **Non-significatifs :**
+   - Les distances (**DISTANCE300** et **DISTANCE470**) n'ont pas d'effet notable.
+   - La plupart des genres, ainsi que **NIGHT_ID2**, ne montrent pas d'effet significatif.
+
+3. **Interprétation globale :**
+   - Les résultats suggèrent que **NIGHT_ID3** est un facteur clé pour le comptage des chauves-souris, avec une augmentation significative du nombre moyen d'individus.
+   - Le genre **TAD** montre un effet marginalement significatif, mais les autres genres n'ont pas d'effet notable.
+   - La distance n'influence pas significativement les résultats, ce qui pourrait suggérer que d'autres facteurs (non inclus dans le modèle) jouent un rôle dans la distribution spatiale des espèces.
+   Modèle avec une forte dispersion.
+
+```{r}
+# Charger les packages nécessaires
+library(ggplot2)
+library(dplyr)
+library(multcompView)
+library(ggpubr)
+
+# Eeffet de la nuissance sonore chez les chiroptères sans les pipistrèles
+ggplot(data_pip, aes(x = factor(DISTANCE), y = TOTAL_NB, fill = factor(NIGHT_ID))) +
+  geom_bar(stat = "identity", position = "dodge")  +
+  labs(title = "Effet de la nuissance sonore chez les pipistrèles",
+       x = "Distance", y = "Nombre total de détection de chiroptère", fill = "Nuit") +
+  theme_minimal()
+
+
+# Suivi du nombre de détection d'espèces par date et en fonction des nuits d'enregistrement
+ggplot(data_no_pip, aes(x = GENRE, y = TOTAL_NB, fill = NIGHT_ID)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Suivie des détection d'espèces chez les autres espèces de chiroptère", fill = "Nuit") + theme_light()
+
+# Activité des pipstrèles dans la nuits 
+ggplot(data_pip, aes(x = HOUR, y = TOTAL_NB, fill = NIGHT_ID)) + geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Activité des pipistrèles au cours des nuits",
+       x = "Temps (heure)", y = "Nombre total de détection de chiroptère", fill = "Nuit") + theme_light()
+
+ggplot(data = data, aes(x = factor(GENRE), y = TOTAL_NB)) +
+  geom_boxplot() +
+  labs(title = "Comparaison des détections par DISTANCE et NIGHT_ID", x = "DISTANCE", y = "TOTAL_NB")
+
+ggplot(data = datu, aes(x = HOUR, y = TOTAL_NB, color = factor(DISTANCE))) +
+  geom_point() +  labs(title = "Évolution des détections en fonction de l'heure", x = "Heure", y = "Nombre total de détections")
+
+library(FactoMineR)
+afc <- CA(table(data$GENRE, data$NIGHT_ID), graph = FALSE)
+fviz_ca_biplot(afc, repel = TRUE)
+```
+
+
+```{r Ulysse  }
+
+library(ade4)
+data$NIGHT_ID <- as.factor(data$NIGHT_ID)
+
+library(lme4)
+library(glmmTMB)
+library(MASS)
+model_mixte <- glmmTMB(
+  TOTAL_NB ~ DISTANCE + HOUR + LUNAR_PHASE + NIGHT_ID + (1 | SITE)+ (1 | DATE),
+  data = datu,
+  family = nbinom2()
+)
+
+
+# Liste des formules candidates
+formulas <- list(
+  model1 = TOTAL_NB ~ DISTANCE + HOUR + LUNAR_PHASE + NIGHT_ID + (1 | SITE) + (1 | DATE),
+  model2 = TOTAL_NB ~ DISTANCE + HOUR + LUNAR_PHASE + (1 | SITE) + (1 | DATE),
+  model3 = TOTAL_NB ~ DISTANCE + HOUR + (1 | SITE) + (1 | DATE),
+  model4 = TOTAL_NB ~ DISTANCE + (1 | SITE) + (1 | DATE),
+  model5 = TOTAL_NB ~ HOUR + LUNAR_PHASE + NIGHT_ID + (1 | SITE) + (1 | DATE),
+  model6 = TOTAL_NB ~ LUNAR_PHASE + NIGHT_ID + (1 | SITE) + (1 | DATE)
+)
+
+# Ajuster chaque modèle et calculer l'AIC
+models <- lapply(formulas, function(formula) {
+  glmmTMB(formula, data = datu, family = nbinom2())
+})
+
+# Comparer les AIC
+aic_values <- sapply(models, AIC)
+best_model_index <- which.min(aic_values)
+
+# Résultats
+cat("Meilleur modèle :\n")
+print(formulas[[best_model_index]])
+cat("AIC :", aic_values[best_model_index])
+
+# Résumé du meilleur modèle
+best_model <- models[[best_model_index]]
+summary(best_model)
+
+library(performance)
+multicollinearity(best_model)
+
+```
+
+
+

@@ -1,0 +1,484 @@
+---
+title: "FIRE Traitement des enregistrements par KALEIDOSCOPE PRO"
+author: "Edouard DISTIN CARVALHO"
+date: "2024-11-29"
+output: pdf_document
+---
+# FIRE : Traitement des enregistrements par KALEIDOSCOPE PRO
+
+## Enregistrements de la FARE-LES-OLIVIERS
+ 
+### Week-end OCTOBRE
+
+Réalisé par Gabrielle METZ
+
+```{r SM4 N1 OCT}
+# Importez le jeux de données
+setwd("D:/FIRE_DD/SM4_N1_21102024_FLO_METZ")
+id <- read.csv("D:/FIRE_DD/SM4_N1_21102024_FLO_METZ/id.csv")
+
+# Nettoyage : 
+data_flo <- id[,10:19] # Retrait des colonnes qui ne seront pas traités 
+data_flo <- data_flo[,-c(4:6)] # Retrait des colonnes des dates et heures en format 12H
+
+# Filtrage des détections les plus fiables (matching ratio > 0.5)
+library(dplyr)
+data_flo<- data_flo %>% 
+  filter(MATCH.RATIO >= 0.5)
+
+data_flo <- data_flo %>% 
+  mutate(DISTANCE = '470')
+
+sun_times_flo <- data.frame(
+  DATE = as.Date(c("2024-09-27", "2024-09-28", "2024-09-29", "2024-09-30",
+                   "2024-10-18", "2024-10-19", "2024-10-20", "2024-10-21")),
+  SUNSET = c("19:00", "19:00", "19:00", "19:00", 
+             "19:00", "19:00", "18:45", "19:45"),
+  SUNRISE = c("07:28", "07:31", "07:33", "07:35",
+              "08:55", "08:57", "08:59", "09:00"))
+
+sun_times_flo <- sun_times_flo %>%
+  mutate(
+    SUNSET = as.POSIXct(paste(DATE, SUNSET), format = "%Y-%m-%d %H:%M"),
+    SUNRISE = as.POSIXct(paste(DATE + 1, SUNRISE), format = "%Y-%m-%d %H:%M"))
+
+sun_times_flo <- sun_times_flo[-c(4,8),]
+
+# Créaton de la colonne DATETIME 
+data_flo$DATE <- as.Date(data_flo$DATE, format = "%Y-%m-%d")
+data_flo$TIME <- hms::as_hms(data_flo$TIME)
+data_flo <- data_flo %>%
+  mutate(
+    DATETIME = as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")
+  )
+
+# Attribution des nuits d'enregistrement par weeek-end en fonction des heures de coucher et lever du soleil
+data_flo <- data_flo %>%
+  rowwise() %>%
+  mutate(
+    NIGHT_ID = {
+      matched_night <- which(DATETIME >= sun_times_flo$SUNSET & DATETIME < sun_times_flo$SUNRISE)
+      if (length(matched_night) == 1) {
+        ((matched_night - 1) %% 3) + 1} 
+      else {NA_real_
+      }
+    }) %>% ungroup()
+
+# Changement d'ordre de DATETIME 
+data_flo <- data_flo %>%
+  select(DATETIME, everything())
+
+# Changement de nom de AUTO.ID. en ESP pour le type d'espèce
+data_flo <- data_flo %>%
+  rename(ESP = AUTO.ID.) 
+
+# Ajout des autres variables en fonction du site 
+data_flo <- data_flo %>% 
+  mutate(SITE = 'LA FARE LES OLIVIERS')
+
+```
+
+```{r SM4 N3  OCT}
+# Importez le jeux de données
+setwd("D:/FIRE_DD/SM4_N3_21102024_FLO_METZ")
+id2 <- read.csv("D:/FIRE_DD/SM4_N3_21102024_FLO_METZ/id.csv")
+
+# Nettoyage : 
+data_flo2 <- id2[,10:19] # Retrait des colonnes qui ne seront pas traités 
+data_flo2 <- data_flo2[,-c(4:6)] # Retrait des colonnes des dates et heures en format 12H
+
+
+# Filtrage des détections les plus fiables (matching ratio > 0.5)
+library(dplyr)
+data_flo2<- data_flo2 %>% 
+  filter(MATCH.RATIO >= 0.5)
+
+data_flo2 <- data_flo2 %>% 
+  mutate(DISTANCE = '300')
+
+# Créaton de la colonne DATETIME 
+data_flo2$DATE <- as.Date(data_flo2$DATE, format = "%Y-%m-%d")
+data_flo2$TIME <- hms::as_hms(data_flo2$TIME)
+data_flo2 <- data_flo2 %>%
+  mutate(
+    DATETIME = as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")
+  )
+
+# Attribution des nuits d'enregistrement par weeek-end en fonction des heures de coucher et lever du soleil
+data_flo2 <- data_flo2 %>%
+  rowwise() %>%
+  mutate(
+    NIGHT_ID = {
+      matched_night <- which(DATETIME >= sun_times_flo$SUNSET & DATETIME < sun_times_flo$SUNRISE)
+      if (length(matched_night) == 1) {
+        ((matched_night - 1) %% 3) + 1} 
+      else {NA_real_
+      }
+    }) %>% ungroup()
+
+# Changement d'ordre de DATETIME 
+data_flo2 <- data_flo2 %>%
+  select(DATETIME, everything())
+
+# Changement de nom de AUTO.ID. en ESP pour le type d'espèce
+data_flo2 <- data_flo2 %>%
+  rename(ESP = AUTO.ID.) 
+
+# Ajout des autres variables en fonction du site 
+data_flo2 <- data_flo2 %>% 
+  mutate(SITE = 'LA FARE LES OLIVIERS')
+
+```
+
+```{r SM4 N5  OCT}
+# Importez le jeux de données
+setwd("D:/FIRE_DD/SM4_N5_21102024_FLO_METZ")
+id3 <- read.csv("D:/FIRE_DD/SM4_N5_21102024_FLO_METZ/id.csv")
+
+# Nettoyage : 
+data_flo3 <- id3[,10:19] # Retrait des colonnes qui ne seront pas traités 
+data_flo3 <- data_flo3[,-c(4:6)] # Retrait des colonnes des dates et heures en format 12H
+
+# Filtrage des détections les plus fiables (matching ratio > 0.5)
+library(dplyr)
+data_flo3<- data_flo3 %>% 
+  filter(MATCH.RATIO >= 0.5)
+
+data_flo3 <- data_flo3 %>% 
+  mutate(DISTANCE = '150')
+
+# Créaton de la colonne DATETIME 
+data_flo3$DATE <- as.Date(data_flo3$DATE, format = "%Y-%m-%d")
+data_flo3$TIME <- hms::as_hms(data_flo3$TIME)
+data_flo3 <- data_flo3 %>%
+  mutate(
+    DATETIME = as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")
+  )
+
+# Attribution des nuits d'enregistrement par weeek-end en fonction des heures de coucher et lever du soleil
+data_flo3 <- data_flo3 %>%
+  rowwise() %>%
+  mutate(
+    NIGHT_ID = {
+      matched_night <- which(DATETIME >= sun_times_flo$SUNSET & DATETIME < sun_times_flo$SUNRISE)
+      if (length(matched_night) == 1) {
+        ((matched_night - 1) %% 3) + 1} 
+      else {NA_real_
+      }
+    }) %>% ungroup()
+
+# Changement d'ordre de DATETIME 
+data_flo3 <- data_flo3 %>%
+  select(DATETIME, everything())
+
+# Changement de nom de AUTO.ID. en ESP pour le type d'espèce
+data_flo3 <- data_flo3 %>%
+  rename(ESP = AUTO.ID.) 
+
+# Ajout des autres variables en fonction du site 
+data_flo3 <- data_flo3 %>% 
+  mutate(SITE = 'LA FARE LES OLIVIERS')
+
+```
+
+### Week-end SEPTEMBRE
+
+Réalisé par Edouard DISTIN CARVALHO
+
+```{r SM4 N1 SEPT}
+# Importez le jeux de données
+setwd("D:/FIRE_DD/SM4_N1_30092024_FLO_DISTIN")
+id4 <- read.csv("D:/FIRE_DD/SM4_N1_30092024_FLO_DISTIN/id.csv")
+
+# Nettoyage : 
+data_flo4 <- id4[,10:19] # Retrait des colonnes qui ne seront pas traités 
+data_flo4 <- data_flo4[,-c(4:6)] # Retrait des colonnes des dates et heures en format 12H
+
+# Filtrage des détections les plus fiables (matching ratio > 0.5)
+library(dplyr)
+data_flo4<- data_flo4 %>% 
+  filter(MATCH.RATIO >= 0.5)
+
+data_flo4 <- data_flo4 %>% 
+  mutate(DISTANCE = '470')
+
+# Créaton de la colonne DATETIME 
+data_flo4$DATE <- as.Date(data_flo4$DATE, format = "%Y-%m-%d")
+data_flo4$TIME <- hms::as_hms(data_flo4$TIME)
+data_flo4 <- data_flo4 %>%
+  mutate(
+    DATETIME = as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")
+  )
+
+# Attribution des nuits d'enregistrement par weeek-end en fonction des heures de coucher et lever du soleil
+data_flo4 <- data_flo4 %>%
+  rowwise() %>%
+  mutate(
+    NIGHT_ID = {
+      matched_night <- which(DATETIME >= sun_times_flo$SUNSET & DATETIME < sun_times_flo$SUNRISE)
+      if (length(matched_night) == 1) {
+        ((matched_night - 1) %% 3) + 1} 
+      else {NA_real_
+      }
+    }) %>% ungroup()
+
+# Changement d'ordre de DATETIME 
+data_flo4 <- data_flo4 %>%
+  select(DATETIME, everything())
+
+# Changement de nom de AUTO.ID. en ESP pour le type d'espèce
+data_flo4 <- data_flo4 %>%
+  rename(ESP = AUTO.ID.) 
+
+# Ajout des autres variables en fonction du site 
+data_flo4 <- data_flo4 %>% 
+  mutate(SITE = 'LA FARE LES OLIVIERS')
+
+```
+
+```{r SM4 N3 SEPT}
+# Importez le jeux de données
+setwd("D:/FIRE_DD/SM4_N3_30092024_FLO_DISTIN")
+id5 <- read.csv("D:/FIRE_DD/SM4_N3_30092024_FLO_DISTIN/id.csv")
+
+# Nettoyage : 
+data_flo5 <- id5[,10:19] # Retrait des colonnes qui ne seront pas traités 
+data_flo5 <- data_flo5[,-c(4:6)] # Retrait des colonnes des dates et heures en format 12H
+
+# Filtrage des détections les plus fiables (matching ratio > 0.5)
+library(dplyr)
+data_flo5<- data_flo5 %>% 
+  filter(MATCH.RATIO >= 0.5)
+data_flo5 <- data_flo5 %>% 
+  mutate(DISTANCE = '300')
+
+# Créaton de la colonne DATETIME 
+data_flo5$DATE <- as.Date(data_flo5$DATE, format = "%Y-%m-%d")
+data_flo5$TIME <- hms::as_hms(data_flo5$TIME)
+data_flo5 <- data_flo5 %>%
+  mutate(
+    DATETIME = as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")
+  )
+
+# Attribution des nuits d'enregistrement par weeek-end en fonction des heures de coucher et lever du soleil
+data_flo5 <- data_flo5 %>%
+  rowwise() %>%
+  mutate(
+    NIGHT_ID = {
+      matched_night <- which(DATETIME >= sun_times_flo$SUNSET & DATETIME < sun_times_flo$SUNRISE)
+      if (length(matched_night) == 1) {
+        ((matched_night - 1) %% 3) + 1} 
+      else {NA_real_
+      }
+    }) %>% ungroup()
+
+# Changement d'ordre de DATETIME 
+data_flo5 <- data_flo5 %>%
+  select(DATETIME, everything())
+
+# Changement de nom de AUTO.ID. en ESP pour le type d'espèce
+data_flo5 <- data_flo5 %>%
+  rename(ESP = AUTO.ID.) 
+
+# Ajout des autres variables en fonction du site 
+data_flo5 <- data_flo5 %>% 
+  mutate(SITE = 'LA FARE LES OLIVIERS')
+
+```
+
+```{r SM4 N5 SEPT}
+# Importez le jeux de données
+setwd("D:/FIRE_DD/SM4_N5_30092024_FLO_DISTIN")
+id6 <- read.csv("D:/FIRE_DD/SM4_N5_30092024_FLO_DISTIN/id.csv")
+
+# Nettoyage : 
+data_flo6 <- id6[,10:19] # Retrait des colonnes qui ne seront pas traités 
+data_flo6 <- data_flo6[,-c(4:6)] # Retrait des colonnes des dates et heures en format 12H
+
+# Filtrage des détections les plus fiables (matching ratio > 0.5)
+library(dplyr)
+data_flo6<- data_flo6 %>% 
+  filter(MATCH.RATIO >= 0.5)
+
+data_flo6 <- data_flo6 %>% 
+  mutate(DISTANCE = '150')
+
+# Créaton de la colonne DATETIME 
+data_flo6$DATE <- as.Date(data_flo6$DATE, format = "%Y-%m-%d")
+data_flo6$TIME <- hms::as_hms(data_flo6$TIME)
+data_flo6 <- data_flo6 %>%
+  mutate(
+    DATETIME = as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")
+  )
+
+# Attribution des nuits d'enregistrement par weeek-end en fonction des heures de coucher et lever du soleil
+data_flo6 <- data_flo6 %>%
+  rowwise() %>%
+  mutate(
+    NIGHT_ID = {
+      matched_night <- which(DATETIME >= sun_times_flo$SUNSET & DATETIME < sun_times_flo$SUNRISE)
+      if (length(matched_night) == 1) {
+        ((matched_night - 1) %% 3) + 1} 
+      else {NA_real_
+      }
+    }) %>% ungroup()
+
+# Changement d'ordre de DATETIME 
+data_flo6 <- data_flo6 %>%
+  select(DATETIME, everything())
+
+# Changement de nom de AUTO.ID. en ESP pour le type d'espèce
+data_flo6 <- data_flo6 %>%
+  rename(ESP = AUTO.ID.) 
+
+# Ajout des autres variables en fonction du site 
+data_flo6 <- data_flo6 %>% 
+  mutate(SITE = 'LA FARE LES OLIVIERS')
+
+```
+
+## Enregistrements du domaine d'Ô à Montpellier
+ 
+Réalisé par Edouard DISTIN CARVALHO
+
+
+```{r Weekends à Montpellier}
+# Importez le jeux de données
+setwd("C:/Users/edoua/OneDrive/Documents/Fac/Cours/UM/S3/FIRE/Données FIRE")
+id_mtp <- read.csv("id_mtp.csv")
+
+# Nettoyage : Suppression des données de la Fare les Oliviers
+
+# Liste des modalités à supprimer
+dflo <- c(
+  "SM4_N5_30092024_FLO_DISTIN\\Data",
+  "SM4_N3_30092024_FLO_DISTIN\\Data",
+  "SM4_N1_30092024_FLO_DISTIN\\Data",
+  "SM4_N5_07102024_FLO_DISTIN\\Data",
+  "SM4_N3_07102024_FLO_DISTIN\\Data",
+  "SM4_N1_07102024_FLO_DISTIN\\Data",
+  "SM4_N5_21102024_FLO_METZ\\Data",
+  "SM4_N3_21102024_FLO_METZ\\Data",
+  "SM4_N1_21102024_FLO_METZ\\Data")
+
+# Filtrer les lignes ne contenant pas les modalités à supprimer
+id_mtp1 <- id_mtp[!id_mtp$FOLDER %in% dflo, ]
+
+data_mtp <- id_mtp1[, c(3, 10:19)] # Retrait des colonnes qui ne seront pas traités 
+
+# Attribution des distance en fonction de l'appareil
+data_mtp <- data_mtp %>% 
+  mutate(DISTANCE = case_when(
+    FOLDER== 'SM4_N1_07102024_MTP_DISTIN\\Data' ~ '150', 
+    FOLDER== 'SM4_N1_11112024_MTP_DISTIN\\Data' ~ '150',
+    FOLDER== 'SM4_N1_14102024_MTP_DISTIN\\Data' ~ '150',
+    FOLDER== 'SM4_N2_11112024_MTP_DISTIN\\Data' ~ '300',
+    FOLDER== 'SM4_N3_07102024_MTP_DISTIN\\Data' ~ '300',
+    FOLDER== 'SM4_N3_14102024_MTP_DISTIN\\Data' ~ '300',
+    FOLDER== 'SM4_N5_07102024_MTP_DISTIN\\Data' ~ '470',
+    FOLDER== 'SM4_N5_14102024_MTP_DISTIN\\Data' ~ '470',
+    FOLDER== 'SM4_N3_11112024_MTP_DISTIN\\Data' ~ '470',
+    TRUE ~ NA_character_))
+
+data_mtp <- data_mtp[,-c(1,5:7)] # Retrait des colonnes des dates et heures en format 12H
+
+# Filtrage des détections les plus fiables (matching ratio > 0.5)
+data_mtp <- data_mtp %>% 
+  filter(MATCH.RATIO >= 0.5)
+
+# Atrribution des nuits d'enregistrements 
+
+library(dplyr)
+library(lubridate)
+
+# Tableau des heures de coucher et lever du soleil
+sun_times <- data.frame(
+  DATE = as.Date(c("2024-10-04", "2024-10-05", "2024-10-06", "2024-10-07",
+                   "2024-10-11", "2024-10-12", "2024-10-13", "2024-10-14",
+                   "2024-11-08", "2024-11-09", "2024-11-10", "2024-11-11")),
+  SUNSET = c("19:21", "19:20", "19:19", "19:18", 
+             "19:10", "19:08", "19:06", "19:02",
+             "17:28", "17:27", "17:26", "17:23"),
+  SUNRISE = c("07:50", "07:50", "07:50", "07:50",
+              "07:55", "07:55", "07:55", "07:55",
+              "07:15", "07:31", "07:32", "07:33"))
+
+sun_times <- sun_times %>%
+  mutate(
+    SUNSET = as.POSIXct(paste(DATE, SUNSET), format = "%Y-%m-%d %H:%M"),
+    SUNRISE = as.POSIXct(paste(DATE + 1, SUNRISE), format = "%Y-%m-%d %H:%M"))
+
+# Suppression des nuits inutiles 
+sun_times <- sun_times[-c(4,8,12),]
+
+# Créaton de la colonne DATETIME 
+data_mtp$DATE <- as.Date(data_mtp$DATE, format = "%Y-%m-%d")
+data_mtp$TIME <- hms::as_hms(data_mtp$TIME)
+data_mtp <- data_mtp %>%
+  mutate(
+    DATETIME = as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")
+  )
+
+# Attribution des nuits d'enregistrement par weeek-end en fonction des heures de coucher et lever du soleil
+data_mtp <- data_mtp %>%
+  rowwise() %>%
+  mutate(
+    NIGHT_ID = {
+      matched_night <- which(DATETIME >= sun_times$SUNSET & DATETIME < sun_times$SUNRISE)
+      if (length(matched_night) == 1) {
+        ((matched_night - 1) %% 3) + 1} 
+      else {NA_real_
+        }
+      }) %>% ungroup()
+
+# Changement d'ordre de DATETIME 
+data_mtp <- data_mtp %>%
+  select(DATETIME, everything())
+
+# Changement de nom de AUTO.ID. en ESP pour le type d'espèce
+data_mtp <- data_mtp %>%
+  rename(ESP = AUTO.ID.) 
+
+
+# Ajout des autres variables en fonction du site 
+data_mtp <- data_mtp %>% 
+  mutate(SITE = 'MONTPELLIER')
+
+```
+
+
+## Jeux de données final : chirofire
+
+```{r Jeux de données final}
+# Rassembler les données obtenus pour chaque appareil 
+chirofire <- bind_rows(data_flo,data_flo2,data_flo3,
+                            data_flo4,data_flo5, data_flo6,
+                  data_mtp) %>%
+  arrange(as.POSIXct(paste(DATE, TIME), format = "%Y-%m-%d %H:%M:%S")) 
+
+# Ajoute cycle lunaire par nuit
+library(lunar)
+chirofire$DATETIME <- ymd_hms(chirofire$DATETIME)
+chirofire$DATE <- as.Date(chirofire$DATE, format = "%Y-%m-%d")
+chirofire <- chirofire %>%
+  mutate(LUNAR_PHASE = lunar.phase(DATE, name = TRUE))
+chirofire <- chirofire %>%
+  mutate(LUNAR_PHASE = case_when(
+    LUNAR_PHASE == "New" ~ "Nouvelle Lune",
+    LUNAR_PHASE == "Waxing" ~ "Croissante",
+    LUNAR_PHASE == "Full" ~ "Pleine Lune",
+    LUNAR_PHASE == "Waning" ~ "Décroissante",
+    TRUE ~ LUNAR_PHASE))
+
+write.csv(chirofire, "C:/Users/edoua/OneDrive/Documents/Fac/Cours/UM/S3/FIRE/Données FIRE/chirofire.csv", row.names = FALSE)
+
+data <- chirofire %>% 
+  group_by(DATE, HOUR, ESP,NIGHT_ID,SITE,DISTANCE,TEMPERATURE,VENT,LUNAR_PHASE) %>% 
+  summarise(TOTAL_PULSES = sum(PULSES, na.rm = TRUE), # somme du nombre de pulses d'espèce par date
+            TOTAL_NB = n()) %>% # somme du nombre d'espèces détecté par date
+  arrange(DATE, HOUR,ESP,NIGHT_ID,SITE,DISTANCE)
+
+write.csv(data, "C:/Users/edoua/OneDrive/Documents/Fac/Cours/UM/S3/FIRE/Données FIRE/statsfire.csv", row.names = FALSE)
+
+```
+
